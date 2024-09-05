@@ -2,7 +2,7 @@ import Config from '@common/config';
 import { Greetings } from '@common/index';
 import { cache } from '@overextended/ox_lib/client';
 
-Greetings();
+// Greetings();
 
 if (Config.EnableNuiCommand) {
   onNet(`${cache.resource}:openNui`, () => {
