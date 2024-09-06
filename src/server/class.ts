@@ -1,7 +1,8 @@
-import type {SquadInterface, Status} from '../types/index'
+import { Player } from '@nativewrappers/fivem/server';
+import type {Player, SquadInterface, Status} from '../types/index'
 
 export const Squads: { [name: string]: Squad } = {};
-export const Players: Map<number, number> = new Map();
+export const Players: Map<number, Player> = new Map();
 export const Invites: Map<number, string> = new Map()
 
 function isPlayerInSquad(player: number): boolean {
@@ -33,20 +34,39 @@ function isPlayerOnline(target: number){
     return GetPlayerPing(target.toString()) !== 0
 }
 
+function GetPlayerInfo(player: number){
+    return {
+        id: player,
+        name: GetPlayerName(player),
+        pfp: ''
+    }
+}
+
+function AddPlayer(squad: SquadInterface, target: number) {
+    const PlayerInfo = GetPlayerInfo(target)
+    squad.players[target] = PlayerInfo
+    Players.set(target, PlayerInfo)
+}
+
+function RemovePlayer(squad: SquadInterface, target:number) {
+    removeFromList(squad.players, target)
+    Players.delete(target)
+}
+
 export class Squad implements SquadInterface {
     public leader: number;
     public name: string;
     public status: Status;
     public identifier: number;
-    private players: number[];
-    private invites: number[];
+    public players: {[id: number]: Player};
+    public invites: number[];
 
     constructor(leader: number, name:string , status: Status) {
         this.leader = leader;
         this.identifier = leader;
         this.name = name;
         this.status = status
-        this.players = []
+        this.players = {}
         this.invites = []
 
         this.addSquad()
@@ -61,8 +81,8 @@ export class Squad implements SquadInterface {
         return this.leader
     }
 
-    private isInSquad(targetPlayer: number) {
-        return this.players.includes(targetPlayer)
+    public isInSquad(targetPlayer: number) {
+        return this.players[targetPlayer]
     }
 
     private isLeader(leader: number) {
@@ -82,15 +102,14 @@ export class Squad implements SquadInterface {
         if (!ignoreInvite && !isPlayerInvited(this, player)) return { success: false, message: 'Player is not invited' };;
     
         removeFromList(this.invites, player)
-        this.players.push(player);
-        Players.set(player, this.identifier)
+        AddPlayer(this, player)
         return { success: true, message: 'Player was invited'};;
     }
     
     public removePlayer(player: number) {
         if (!isPlayerInSquad(player)) return;
-        removeFromList(this.players, player)
-        Players.delete(player)
+
+        RemovePlayer(this, player)
 
         if (isSquadEmpty(this)) {
             this.removeSquad()
@@ -107,16 +126,22 @@ export class Squad implements SquadInterface {
         return { success: true, message: `Player ${targetPlayer} received your invite`, squad: this };
     }
 
-    public kickPlayer(iniciator: number, targetPlayer: number) {
+    public kickPlayer(iniciator: number, targetPlayer: number): {success: boolean, message: string} {
         const isLeader = this.isLeader(iniciator)
 
-        if (!isLeader) return 'You cannot kick bruv';
+        if (!isLeader) return {success: false, message: 'You cannot kick bruv'};
 
-        if (iniciator === +targetPlayer) return 'Why is blud trying to kick himself, just leave the squad'
+        if (iniciator === +targetPlayer) return {success: false, message: 'Why is blud trying to kick himself, just leave the squad'}
 
         this.removePlayer(targetPlayer)
 
-        return this
+        return {success: true, message: `Player ${targetPlayer} was kicked by ${iniciator} successfully`}
+    }
+
+    public emit(eventName: string, ...args: any[]): void{
+        for (const [_, player] of Object.entries(this.players)) {
+            emitNet(eventName, player.id, ...args)
+        }
     }
 }
 
@@ -124,11 +149,11 @@ export function GetSquad(squad: number){
     return Squads[squad]
 }
 
-export function GetSquadByPlayer(player: number){
+export function GetSquadByPlayer(player: number): SquadInterface | null {
     const playerLobby = Players.get(player)
     if (!playerLobby) return;
 
-    return Squads[playerLobby] || false
+    return Squads[playerLobby.id] || null
 }
 
 export function GetSquadPlayer(){

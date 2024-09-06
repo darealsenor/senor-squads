@@ -21,6 +21,7 @@ onNet('senor-squads:server:Invite', (targetPlayer: number) => {
     }
 
     const inviteAttempt = squad.invitePlayer(targetPlayer);
+    console.log(inviteAttempt.success);
 
     if (!inviteAttempt.success) {
         return Notify(source, inviteAttempt.message, 'error');
@@ -28,12 +29,46 @@ onNet('senor-squads:server:Invite', (targetPlayer: number) => {
 
     Notify(source, inviteAttempt.message, 'success');
     emitNet('senor-squads:client:Invited', targetPlayer, inviteAttempt.squad)
+    squad.emit('senor-squads:client:SquadUpdate', squad)
 });
 
 onNet('senor-squads:server:InviteAccepted', (invite: SquadInterface) => {
     const squadID = invite.identifier
     const squad = GetSquad(squadID)
     const addPlayer = squad.addPlayer(source, false)
-    console.log(addPlayer);
-    emitNet('senor-squads:client:SquadUpdate', source, squad)
+    squad.emit('senor-squads:client:SquadUpdate', squad)
+    squad.emit('ox_lib:notify', {
+        id: 'Squads',
+        title: 'Squads',
+        description: addPlayer.message,
+        position: 'center-right',
+        type: 'success'
+    })
+
+    emitNet('senor-squads:client:RemoveInvite', squad)
+})
+
+onNet('senor-squads:server:KickPlayer', (targetPlayer: number) => {
+    const squad = GetSquadByPlayer(source)
+
+    if (!squad) return Notify(source, 'You dont have a squad bruv', 'error');
+
+    const isPlayerInSquad = squad.isPlayerInSquad(targetPlayer)
+
+    if (!isPlayerInSquad) return Notify(source, 'Target player is not in squad', 'error');
+
+    if (isPlayerInSquad){
+        const kickAttempt = squad.kickPlayer(source, targetPlayer)
+        if (kickAttempt.success) {
+            squad.emit('senor-squads:client:SquadUpdate', squad)
+        }
+        return squad.emit('ox_lib:notify', {
+            id: 'Squads',
+            title: 'Squads',
+            description: kickAttempt.message,
+            position: 'center-right',
+            type: kickAttempt ? 'success' : 'error'
+        })
+    }
+
 })
