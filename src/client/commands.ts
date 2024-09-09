@@ -1,48 +1,79 @@
-import { Invites, mySquad, Squads } from ".";
-import { Status } from "../types";
-import { doesInviteExist, isPlayerInSquad } from "./functions";
-import { Notify } from "./util";
+import { CSquadInstance } from '.';
+import { Status } from '../types';
+import { Notify } from './util';
 
-RegisterCommand('createsquad', (playerId?: number, args) => {
-    emitNet('senor-squads:server:CreateSquad', 'senor', Status.Open)
-  }, false)
-  
-  
-  RegisterCommand('availablesquads', (playerId: number) => {
-    console.log(Squads);
-  }, false)
-  
-  RegisterCommand('mysquad', (playerId: number, args) => {
-    console.log(mySquad);
-  }, false)
-  
-  RegisterCommand('invite', (playerId: number, args) => {
-    emitNet('senor-squads:server:Invite', +args[0])
-  }, false)
-  
-  RegisterCommand('myinvites', (playerId: number) => {
-    console.log(Invites);
-  }, false)
-  
-  RegisterCommand('acceptInvite', (playerId: number, args: string[]) => {
-    if (Invites.length === 0) return Notify('You dont have any invites', 'error')
-  
-    const checkInvite = doesInviteExist(+args[0])
-  
-    console.log(checkInvite);
-  
-    if (!checkInvite.success) {
-      return Notify(checkInvite.message, 'error')
-    }
-  
-    emitNet('senor-squads:server:InviteAccepted', checkInvite.invite)
-  }, false)
-  
-  RegisterCommand('kicksquad', (playerId: number, args: string[]) => {
-    const target = +args[0]
-    const _isPlayerInSquad = isPlayerInSquad(target)
-  
-    if (!_isPlayerInSquad) return Notify(_isPlayerInSquad.message, 'error')
-  
-      emitNet('senor-squads:server:KickPlayer', _isPlayerInSquad.targetPlayer)
-  }, false)
+RegisterCommand(
+  'createsquad',
+  () => {
+    emitNet('senor-squads:server:CreateSquad', 'senor', Status.Open);
+  },
+  false
+);
+
+RegisterCommand(
+  'availablesquads',
+  () => {
+    console.log(CSquadInstance.squads);
+  },
+  false
+);
+
+RegisterCommand(
+  'mysquad',
+  () => {
+    console.log(CSquadInstance.mySquad);
+  },
+  false
+);
+
+RegisterCommand(
+  'invite',
+  (playerId: number, args: string[]) => {
+    emitNet('senor-squads:server:Invite', +args[0]);
+  },
+  false
+);
+
+RegisterCommand(
+  'myinvites',
+  () => {
+    console.log(CSquadInstance.Invites);
+  },
+  false
+);
+
+RegisterCommand(
+  'acceptInvite',
+  (playerId: number, args: string[]) => {
+    const { success, message, invite } = CSquadInstance.GetInvite(+args[0]);
+
+    if (!success) return Notify(message, 'error');
+    emitNet('senor-squads:server:InviteAccepted', invite);
+    CSquadInstance.removeInvite(invite);
+  },
+  false
+);
+
+RegisterCommand(
+  'kicksquad',
+  (playerId: number, args: string[]) => {
+    const target = +args[0];
+    const { success, message, player } = CSquadInstance.isPlayerInMySquad(target);
+    if (!success) return Notify(message, 'error');
+
+    console.log(player);
+    emitNet('senor-squads:server:KickPlayer', target);
+  },
+  false
+);
+
+RegisterCommand(
+  'leavesquad', 
+  () => {
+    const mySquad = CSquadInstance.getMySquad()
+    if (!mySquad) return Notify('No squad', 'error')
+
+    emitNet('senor-squads:server:LeaveSquad')
+  },
+  false
+)

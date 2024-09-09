@@ -1,4 +1,3 @@
-import { Player } from '@nativewrappers/fivem/server';
 import type {Player, SquadInterface, Status} from '../types/index'
 
 export const Squads: { [name: string]: Squad } = {};
@@ -27,7 +26,7 @@ function removeFromList<T>(list: T[], property: T): void {
 }
 
 function isSquadEmpty(squad: Squad){
-    return squad.players.length == 0
+    return Object.keys(squad.players).length == 0
 }
 
 function isPlayerOnline(target: number){
@@ -37,8 +36,9 @@ function isPlayerOnline(target: number){
 function GetPlayerInfo(player: number){
     return {
         id: player,
-        name: GetPlayerName(player),
-        pfp: ''
+        name: GetPlayerName(player.toString()),
+        pfp: '',
+        ped: GetPlayerPed(player.toString())
     }
 }
 
@@ -48,9 +48,12 @@ function AddPlayer(squad: SquadInterface, target: number) {
     Players.set(target, PlayerInfo)
 }
 
-function RemovePlayer(squad: SquadInterface, target:number) {
-    removeFromList(squad.players, target)
+function RemovePlayer(squad: SquadInterface, target:number): Player | null {
+    const player = {...squad.players[target]}
+    delete squad.players[target]
     Players.delete(target)
+
+    return player
 }
 
 export class Squad implements SquadInterface {
@@ -73,25 +76,36 @@ export class Squad implements SquadInterface {
         this.addPlayer(leader, true)
     }
 
-    private set SetLeader(player: number){
+    public set SetLeader(player: number){
         this.leader = player
     }
 
-    private get GetLeader(){
+    public get GetLeader(){
         return this.leader
     }
 
-    public isInSquad(targetPlayer: number) {
-        return this.players[targetPlayer]
+    public isInSquad(targetPlayer: number): boolean {
+        return this.players[targetPlayer] ? true : false
     }
 
-    private isLeader(leader: number) {
+    public isLeader(leader: number) {
         return this.leader === +leader
     }
 
     private addSquad() {
         Squads[this.identifier] = this;
     }
+
+    public getRandomPlayer(): Player | undefined {
+        const playerIds = Object.keys(this.players);
+        if (playerIds.length === 0) return undefined;
+    
+        const randomIndex = Math.floor(Math.random() * playerIds.length);
+        const randomPlayerId = playerIds[randomIndex];
+    
+        return this.players[+randomPlayerId];
+    }
+    
 
     private removeSquad() {
         return delete Squads[this.identifier]
@@ -106,15 +120,24 @@ export class Squad implements SquadInterface {
         return { success: true, message: 'Player was invited'};;
     }
     
-    public removePlayer(player: number) {
-        if (!isPlayerInSquad(player)) return;
+    public removePlayer(playerId: number): {success: boolean, message: string, player: Player | null} {
 
-        RemovePlayer(this, player)
+        if (!this.isInSquad(playerId)) return { success: false, message: `Target player: ${playerId} is not in squad`, player: null};
+        const isLeader = this.isLeader(playerId)
+        const player = RemovePlayer(this, playerId)
+        const _isSquadEmpty = isSquadEmpty(this)
 
-        if (isSquadEmpty(this)) {
-            this.removeSquad()
+        if (isLeader && !_isSquadEmpty) {
+            const randomPlayer: Player = this.getRandomPlayer()
+            this.SetLeader = randomPlayer.id
+            return {success: true, message: `Player ${playerId} was removed, new squad leader is: ${randomPlayer.id}`, player: player}
         }
-        return this;
+
+        if (_isSquadEmpty) {
+            this.removeSquad()
+            return {success: true, message: `Player ${playerId} was removed, and the squad is empty so its closed`, player: player}
+        }
+        return {success: false, message: 'Something went wrong', player: null};
     }
 
     public invitePlayer(targetPlayer: number): { success: boolean; message: string, squad?: Squad } {
@@ -138,7 +161,7 @@ export class Squad implements SquadInterface {
         return {success: true, message: `Player ${targetPlayer} was kicked by ${iniciator} successfully`}
     }
 
-    public emit(eventName: string, ...args: any[]): void{
+    public emit(eventName: string, ...args: string[] | SquadInterface[]): void{
         for (const [_, player] of Object.entries(this.players)) {
             emitNet(eventName, player.id, ...args)
         }

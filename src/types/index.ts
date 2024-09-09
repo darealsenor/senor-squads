@@ -4,7 +4,7 @@ export enum Status {
 }
 
 export interface SquadInterface {
-    players: any;
+    players: { [id: number]: Player };
     leader: number;
     name: string;
     status: Status;
@@ -15,4 +15,12 @@ export type Player = {
     id: number;
     name: string;
     pfp: string;
+    ped: number;
+}
+
+
+export interface CSquadInterface {
+    squads: SquadInterface[];
+    mySquad: SquadInterface;
+    Invites: SquadInterface[]
 }

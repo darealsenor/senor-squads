@@ -3,7 +3,7 @@ import { GetSquad, GetSquadByPlayer, GetSquads, Squad } from "./class";
 import { Notify } from "./utils";
 
 onNet('senor-squads:server:CreateSquad', (name: string, status: Status) => {
-    const Squads: Squad[] = GetSquads()
+    const Squads = GetSquads()
     if (Squads[source]) return Notify(source, 'You already own a squad baby', 'error');
     
     const createdSquad = new Squad(source, name, status)    
@@ -14,21 +14,20 @@ onNet('senor-squads:server:CreateSquad', (name: string, status: Status) => {
 });
 
 onNet('senor-squads:server:Invite', (targetPlayer: number) => {
-    const squad = GetSquadByPlayer(source);
+    const squad = GetSquadByPlayer(source) as Squad;
 
     if (!squad) {
         return Notify(source, 'You dont have any squad bruv', 'error');
     }
 
-    const inviteAttempt = squad.invitePlayer(targetPlayer);
-    console.log(inviteAttempt.success);
+    const {success, message} = squad.invitePlayer(targetPlayer);
 
-    if (!inviteAttempt.success) {
-        return Notify(source, inviteAttempt.message, 'error');
+    if (!success) {
+        return Notify(source, message, 'error');
     }
 
-    Notify(source, inviteAttempt.message, 'success');
-    emitNet('senor-squads:client:Invited', targetPlayer, inviteAttempt.squad)
+    Notify(source, message, 'success');
+    emitNet('senor-squads:client:Invited', targetPlayer, squad)
     squad.emit('senor-squads:client:SquadUpdate', squad)
 });
 
@@ -49,11 +48,11 @@ onNet('senor-squads:server:InviteAccepted', (invite: SquadInterface) => {
 })
 
 onNet('senor-squads:server:KickPlayer', (targetPlayer: number) => {
-    const squad = GetSquadByPlayer(source)
+    const squad = GetSquadByPlayer(source) as Squad
 
     if (!squad) return Notify(source, 'You dont have a squad bruv', 'error');
 
-    const isPlayerInSquad = squad.isPlayerInSquad(targetPlayer)
+    const isPlayerInSquad = squad.isInSquad(targetPlayer);
 
     if (!isPlayerInSquad) return Notify(source, 'Target player is not in squad', 'error');
 
@@ -61,6 +60,7 @@ onNet('senor-squads:server:KickPlayer', (targetPlayer: number) => {
         const kickAttempt = squad.kickPlayer(source, targetPlayer)
         if (kickAttempt.success) {
             squad.emit('senor-squads:client:SquadUpdate', squad)
+            emitNet('senor-squads:client:SquadUpdate', targetPlayer, {})
         }
         return squad.emit('ox_lib:notify', {
             id: 'Squads',
@@ -70,5 +70,28 @@ onNet('senor-squads:server:KickPlayer', (targetPlayer: number) => {
             type: kickAttempt ? 'success' : 'error'
         })
     }
-
 })
+
+onNet('senor-squads:server:LeaveSquad', () => {
+    const squad = GetSquadByPlayer(source) as Squad
+
+    if (!squad) return Notify(source, 'You dont have a squad bruv', 'error');
+
+    const {success} = squad.removePlayer(source)
+
+    if (success) {
+        squad.emit('senor-squads:client:SquadUpdate', squad)
+        emitNet('senor-squads:client:SquadUpdate', source, {})
+    }
+})
+
+on("playerDropped", () => {
+    const squad = GetSquadByPlayer(global.source) as Squad
+    if (!squad) return;
+
+    const {success} = squad.removePlayer(source)
+
+    if (success) {
+        squad.emit('senor-squads:client:SquadUpdate', squad)
+    }
+});
